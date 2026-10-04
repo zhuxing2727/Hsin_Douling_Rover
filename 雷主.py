@@ -130,7 +130,6 @@ class Rover(BaseChar):
     def reset_state(self):
         self.ring_index = -1
         super().reset_state()
-        _reset(self.task)
         self._bind_form_logger()
 
     @property

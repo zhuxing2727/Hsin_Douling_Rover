@@ -123,7 +123,6 @@ class Douling(BaseChar):
 
     def reset_state(self):
         super().reset_state()
-        _reset(self.task)
 
     def do_perform(self):
         _perform_axis(self, self.AXIS_POSITION)
