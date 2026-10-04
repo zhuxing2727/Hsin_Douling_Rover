@@ -31,6 +31,10 @@ class Douling(BaseChar):
         self.sleep(self.NORMAL_INTERVAL)
         self.sleep(self.NORMAL_ATTACK_FINISH_WAIT, False)
 
+    def _normal_attack_retry(self):
+        self.normal_attack()
+        self.sleep(self.NORMAL_INTERVAL)
+
     def _normal_chain(self, count):
         for _ in range(count):
             self._normal_attack_with_wait()
@@ -40,7 +44,7 @@ class Douling(BaseChar):
             self.check_combat()
             if predicate():
                 return True
-            self._normal_attack_with_wait()
+            self._normal_attack_retry()
 
     def _resonance(self):
         self._wait_ready(self.resonance_available)
@@ -56,7 +60,7 @@ class Douling(BaseChar):
             self._wait_ready(self.liberation_available)
             if self.click_liberation(wait_if_cd_ready=0.2):
                 return True
-            self._normal_attack_with_wait()
+            self._normal_attack_retry()
 
     def _heavy(self):
         self.heavy_attack(self.HEAVY_DURATION)
