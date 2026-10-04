@@ -1,6 +1,7 @@
 import time
 
 from src.char.BaseChar import BaseChar
+from src.Labels import Labels
 
 
 class Hsin(BaseChar):
@@ -9,6 +10,7 @@ class Hsin(BaseChar):
     AXIS_POSITION = 1
     NORMAL_INTERVAL = 0.12
     NORMAL_ATTACK_FINISH_WAIT = 0.35
+    TRANSFORMED_NORMAL_ATTACK_EXTRA_WAIT = 0.40  # 第一个R后变形状态的额外普攻后摇
     FINAL_AA_GAP = 0.30
     HEAVY_DURATION = 1.0
     HEAVY_VERIFY_TIMEOUT = 1.0
@@ -18,6 +20,7 @@ class Hsin(BaseChar):
         super().__init__(*args, **kwargs)
         self._axis_count = 0
         self._axis_combat_start = None
+        self._transformed = False
 
     def _prepare_axis(self):
         combat_start = getattr(self.task, "combat_start", None)
@@ -25,17 +28,23 @@ class Hsin(BaseChar):
             previous = self._axis_combat_start
             self._axis_combat_start = combat_start
             self._axis_count = 0
+            self._transformed = False
             if previous is not None:
                 self.task._fixed_axis_started = False
 
     def _normal_attack_with_wait(self):
         self.normal_attack()
         self.sleep(self.NORMAL_INTERVAL)
-        self.sleep(self.NORMAL_ATTACK_FINISH_WAIT, False)
+        finish_wait = self.NORMAL_ATTACK_FINISH_WAIT
+        if self._transformed:
+            finish_wait += self.TRANSFORMED_NORMAL_ATTACK_EXTRA_WAIT
+        self.sleep(finish_wait, False)
 
     def _normal_attack_retry(self):
         self.normal_attack()
         self.sleep(self.NORMAL_INTERVAL)
+        if self._transformed:
+            self.sleep(self.TRANSFORMED_NORMAL_ATTACK_EXTRA_WAIT, False)
 
     def _normal_chain(self, count):
         for _ in range(count):
@@ -71,10 +80,19 @@ class Hsin(BaseChar):
             self.click_echo(time_out=0)
         return True
 
-    def _liberation(self):
+    def _liberation(self, enhanced=False):
         while True:
-            self._wait_ready(self.liberation_available)
+            if enhanced:
+                self.check_combat()
+                has_enhanced = bool(self.task.find_one(Labels.hsin_lib2, threshold=0.7))
+                if not has_enhanced:
+                    self._normal_attack_retry()
+                    continue
+            else:
+                self._wait_ready(self.liberation_available)
             if self.click_liberation(wait_if_cd_ready=0.2):
+                if not enhanced:
+                    self._transformed = True
                 return True
             self._normal_attack_retry()
 
@@ -101,6 +119,8 @@ class Hsin(BaseChar):
             if char is not None and hasattr(char, "_axis_count"):
                 char._axis_count = 0
                 char._axis_combat_start = self._axis_combat_start
+                if hasattr(char, "_transformed"):
+                    char._transformed = False
 
     def _switch_to_slot(self, slot):
         target_index = slot - 1
@@ -144,6 +164,7 @@ class Hsin(BaseChar):
         return True
 
     def _final_segment(self):
+        self._transformed = False
         self._normal_chain(4)
         self._heavy()
         self._liberation()
@@ -154,7 +175,7 @@ class Hsin(BaseChar):
         self._break()
         self._normal_chain(3)
         self._heavy()
-        return self._liberation()
+        return self._liberation(enhanced=True)
 
     def _perform_startup(self):
         self._normal_chain(2)
@@ -178,4 +199,5 @@ class Hsin(BaseChar):
     def on_combat_end(self, chars):
         self._axis_count = 0
         self._axis_combat_start = None
+        self._transformed = False
         self.task._fixed_axis_started = False

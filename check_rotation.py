@@ -27,7 +27,7 @@ def main() -> None:
     role_requirements = {
         "卜灵.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation", "heavy_attack"),
         "雷主.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation"),
-        "心.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation", "heavy_attack", "f_break"),
+        "心.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation", "heavy_attack", "f_break", "TRANSFORMED_NORMAL_ATTACK_EXTRA_WAIT", "hsin_lib2"),
     }
     for filename, required in role_requirements.items():
         text = (ROOT / filename).read_text(encoding="utf-8")

@@ -21,6 +21,8 @@ python check_rotation.py
 
 轴状态保存在任务对象的 `_fixed_rotation_state` 上。角色的 `reset_state()` 不会重置该状态，避免框架切人时把轴反复退回启动段；创建新的任务对象时会自动从启动轴开始。
 
+心的第一个 R 成功后进入变形状态，`心.py` 中的 `TRANSFORMED_NORMAL_ATTACK_EXTRA_WAIT` 控制变形后的普攻额外后摇；第二个 R 会等待 `Labels.hsin_lib2` 强化标记后释放。
+
 ## Git
 
 当前目录已初始化为 Git 仓库。查看状态、记录变更并提交：
