@@ -1,131 +1,131 @@
 import time
 
-from src.char.BaseChar import BaseChar, SwitchPriority
-
-
-_STARTUP = ((2, ("a", "a", "a", "a", "E", "a", "Z", "Q", "R")), (3, ("E", "a", "a", "a", "a")), (1, ("a", "a")), (3, ("E", "R", "Q")), (1, ("a", "a", "a", "a", "Z", "R", "a", "E", "E", "a", "a", "F", "a", "a", "a", "Z", "R")))
-_LOOP = ((3, ("E", "a")), (2, ("a", "a", "a", "a", "E", "a", "Z", "Q", "R")), (3, ("E", "R", "Q")), (1, ("a", "a", "a", "a", "Z", "R", "a", "E", "E", "a", "a", "F", "a", "a", "a", "Z", "R")))
-
-
-class _AxisState:
-    def __init__(self):
-        self.phase, self.index = "startup", 0
-
-    def steps(self):
-        return _STARTUP if self.phase == "startup" else _LOOP
-
-    def advance(self):
-        self.index += 1
-        if self.phase == "startup" and self.index == len(_STARTUP):
-            self.phase, self.index = "loop", 0
-        elif self.phase == "loop" and self.index == len(_LOOP):
-            self.index = 0
-
-
-def _state(task):
-    value = getattr(task, "_fixed_rotation_state", None)
-    if value is None or not all(hasattr(value, x) for x in ("phase", "index", "steps", "advance")):
-        value = _AxisState()
-        setattr(task, "_fixed_rotation_state", value)
-    return value
-
-
-def _reset(task):
-    value = _state(task)
-    value.phase, value.index = "startup", 0
-
-
-def _call(obj, name, *args, **kwargs):
-    method = getattr(obj, name, None)
-    if method is None:
-        return None
-    try:
-        return method(*args, **kwargs)
-    except TypeError:
-        return method(*args)
-
-
-def _sleep(char, seconds):
-    method = getattr(char, "sleep", None)
-    (method or time.sleep)(seconds)
-
-
-def _heavy(char):
-    task = char.task
-    down, up = getattr(task, "mouse_down", None), getattr(task, "mouse_up", None)
-    if down is None or up is None:
-        _call(char, "heavy_attack")
-        return
-    _call(char, "check_combat")
-    down()
-    try:
-        started = time.time()
-        while time.time() - started < 1.0:
-            if getattr(char, "flying", lambda: False)():
-                break
-            _sleep(char, 0.05)
-    finally:
-        up()
-    _sleep(char, 0.01)
-    if getattr(char, "flying", lambda: False)():
-        _call(char, "wait_down")
-
-
-def _action(char, action):
-    if action == "a":
-        _call(char, "cycle_start"); _call(char, "click"); _call(char, "cycle_sleep")
-    elif action == "E":
-        _call(char, "check_combat"); _call(char, "click_resonance", send_click=True, time_out=0)
-    elif action == "Z":
-        _heavy(char)
-    elif action == "Q":
-        _call(char, "click_echo", time_out=0)
-    elif action == "R":
-        _call(char, "click_liberation", send_click=True)
-    elif action == "F":
-        for name in ("click_execution", "click_forte", "execute"):
-            method = getattr(char, name, None)
-            if method:
-                method(); break
-        else:
-            for name in ("press_key", "key_press", "send_key", "press"):
-                method = getattr(char.task, name, None)
-                if method:
-                    try: method("f")
-                    except TypeError: method("F")
-                    break
-
-
-def _switch(char, current, target):
-    if current == target:
-        return
-    chars = getattr(char.task, "chars", ())
-    actual = next((i for i, item in enumerate(chars, 1) if item is char), current)
-    count = (target - actual) % 3 or 3
-    for index in range(count):
-        char.switch_next_char()
-        if index + 1 < count: _sleep(char, 0.05)
-
-
-def _perform_axis(char, position):
-    state = _state(char.task)
-    target, actions = state.steps()[state.index]
-    if target != position:
-        _switch(char, position, target)
-        return
-    for action in actions: _action(char, action)
-    state.advance()
-    _switch(char, position, state.steps()[state.index][0])
+from src.char.BaseChar import BaseChar
 
 
 class Douling(BaseChar):
-    AXIS_POSITION = 2
+    """2号位卜灵：aaaa -> EaZQR，完成后切到3号位。"""
 
-    def reset_state(self):
-        super().reset_state()
+    AXIS_POSITION = 2
+    NORMAL_INTERVAL = 0.12
+    NORMAL_ATTACK_FINISH_WAIT = 0.2
+    HEAVY_DURATION = 1.0
+    SWITCH_TIMEOUT = 2.5
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._axis_count = 0
+        self._axis_combat_start = None
+
+    def _prepare_axis(self):
+        combat_start = getattr(self.task, "combat_start", None)
+        if combat_start != self._axis_combat_start:
+            previous = self._axis_combat_start
+            self._axis_combat_start = combat_start
+            self._axis_count = 0
+            if previous is not None:
+                self.task._fixed_axis_started = False
+
+    def _normal_attack_with_wait(self):
+        self.normal_attack()
+        self.sleep(self.NORMAL_INTERVAL)
+        self.sleep(self.NORMAL_ATTACK_FINISH_WAIT, False)
+
+    def _normal_chain(self, count):
+        for _ in range(count):
+            self._normal_attack_with_wait()
+
+    def _wait_ready(self, predicate):
+        while True:
+            self.check_combat()
+            if predicate():
+                return True
+            self._normal_attack_with_wait()
+
+    def _resonance(self):
+        self._wait_ready(self.resonance_available)
+        return bool(self.click_resonance(time_out=1.5)[0])
+
+    def _echo(self):
+        if self.echo_available():
+            self.click_echo(time_out=0)
+        return True
+
+    def _liberation(self):
+        self._wait_ready(self.liberation_available)
+        return bool(self.click_liberation(wait_if_cd_ready=0.2))
+
+    def _heavy(self):
+        self.heavy_attack(self.HEAVY_DURATION)
+        return True
+
+    def _reset_team_axis(self):
+        for char in getattr(self.task, "chars", []):
+            if char is not None and hasattr(char, "_axis_count"):
+                char._axis_count = 0
+                char._axis_combat_start = self._axis_combat_start
+
+    def _switch_to_slot(self, slot):
+        target_index = slot - 1
+        self.has_intro = False
+        self.has_sub_dps_intro = False
+        self._liberation_available = self.liberation_available()
+        self.use_tool_box()
+        start = time.time()
+        while time.time() - start < self.SWITCH_TIMEOUT:
+            in_team, current_index, _ = self.task.in_team()
+            if in_team and current_index == target_index:
+                now = time.time()
+                self.last_switch_time = now
+                for char in getattr(self.task, "chars", []):
+                    if char is None:
+                        continue
+                    char.is_current_char = char.index == target_index
+                    if char.index == target_index:
+                        char.last_switch_in_time = now
+                return True
+            self.task.send_key(str(slot))
+            self.task.next_frame()
+            self.sleep(0.1, False)
+        self.logger.warning("Douling fixed-axis switch to slot %s timed out", slot)
+        return False
+
+    def _finish(self, success):
+        if success:
+            self._axis_count += 1
+            self.task._fixed_axis_started = True
+            self._switch_to_slot(3)
+        else:
+            self.logger.warning("Douling fixed-axis action failed; restarting at slot 2")
+            self.task._fixed_axis_started = False
+            self._reset_team_axis()
+            self._switch_to_slot(2)
+
+    def _perform_axis(self):
+        self._normal_chain(4)
+        if not self._resonance():
+            return False
+        self._normal_attack_with_wait()
+        self._heavy()
+        self._echo()
+        return self._liberation()
+
+    def _ensure_start_slot(self):
+        in_team, current_index, _ = self.task.in_team()
+        if not in_team or current_index != 1:
+            self._switch_to_slot(2)
+            return False
+        return True
 
     def do_perform(self):
-        _perform_axis(self, self.AXIS_POSITION)
+        self._prepare_axis()
+        if self._axis_count == 0 and not self._ensure_start_slot():
+            return
+        if self.has_intro:
+            self.wait_intro(1.2)
+        self._finish(self._perform_axis())
 
-    def get_switch_priority(self, current_char=None, has_intro=False, target_low_con=False):
-        return SwitchPriority.NO
+    def on_combat_end(self, chars):
+        self._axis_count = 0
+        self._axis_combat_start = None
+        self.task._fixed_axis_started = False

@@ -24,6 +24,19 @@ def main() -> None:
             if expected not in classes:
                 errors.append(f"{filename} does not define {expected}")
 
+    role_requirements = {
+        "卜灵.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation", "heavy_attack"),
+        "雷主.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation"),
+        "心.py": ("send_key", "in_team", "normal_attack", "click_resonance", "click_echo", "click_liberation", "heavy_attack", "f_break"),
+    }
+    for filename, required in role_requirements.items():
+        text = (ROOT / filename).read_text(encoding="utf-8")
+        if "rotation_axis" in text:
+            errors.append(f"{filename} must not depend on rotation_axis")
+        for name in required:
+            if name not in text:
+                errors.append(f"{filename} is missing required BaseChar/task API: {name}")
+
     if tuple(step.position for step in STARTUP_AXIS) != (2, 3, 1, 3, 1):
         errors.append("startup axis position check failed")
     if tuple(step.position for step in LOOP_AXIS) != (3, 2, 3, 1):
