@@ -81,8 +81,11 @@ class Rover(BaseChar):
         return True
 
     def _liberation(self):
-        self._wait_ready(self.liberation_available)
-        return bool(self.click_liberation(wait_if_cd_ready=0.2))
+        while True:
+            self._wait_ready(self.liberation_available)
+            if self.click_liberation(wait_if_cd_ready=0.2):
+                return True
+            self._normal_attack_with_wait()
 
     def _reset_team_axis(self):
         for char in getattr(self.task, "chars", []):

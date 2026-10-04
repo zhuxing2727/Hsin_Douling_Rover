@@ -11,6 +11,7 @@ class Hsin(BaseChar):
     NORMAL_ATTACK_FINISH_WAIT = 0.35
     FINAL_AA_GAP = 0.30
     HEAVY_DURATION = 1.0
+    HEAVY_VERIFY_TIMEOUT = 1.0
     SWITCH_TIMEOUT = 2.5
 
     def __init__(self, *args, **kwargs):
@@ -49,8 +50,17 @@ class Hsin(BaseChar):
             self._normal_attack_with_wait()
 
     def _resonance(self):
-        self._wait_ready(self.resonance_available)
-        return bool(self.click_resonance(time_out=1.5)[0])
+        while True:
+            self._wait_ready(self.resonance_available)
+            result = self.click_resonance(
+                has_animation=True,
+                send_click=True,
+                animation_min_duration=0.5,
+                time_out=1.5,
+            )
+            if result and result[0]:
+                return True
+            self._normal_attack_with_wait()
 
     def _echo(self):
         if self.echo_available():
@@ -58,12 +68,25 @@ class Hsin(BaseChar):
         return True
 
     def _liberation(self):
-        self._wait_ready(self.liberation_available)
-        return bool(self.click_liberation(wait_if_cd_ready=0.2))
+        while True:
+            self._wait_ready(self.liberation_available)
+            if self.click_liberation(wait_if_cd_ready=0.2):
+                return True
+            self._normal_attack_with_wait()
 
     def _heavy(self):
-        self.heavy_attack(self.HEAVY_DURATION)
-        return True
+        while True:
+            forte_was_full = self.is_mouse_forte_full()
+            self.heavy_attack(self.HEAVY_DURATION)
+            if not forte_was_full:
+                return True
+
+            end = time.time() + self.HEAVY_VERIFY_TIMEOUT
+            while time.time() < end:
+                if not self.is_mouse_forte_full():
+                    return True
+                self.task.next_frame()
+            self._normal_attack_with_wait()
 
     def _break(self):
         self.f_break()
